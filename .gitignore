@@ -9,3 +9,7 @@ bin/
 
 # GoLand
 .idea/
+
+# Локальные справочные материалы курса
+/docs/course/
+/contracts/schema.md
