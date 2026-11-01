@@ -6,3 +6,10 @@
 bin/
 
 .DS_Store
+
+# GoLand
+.idea/
+
+# Локальные справочные материалы курса
+/docs/course/
+/contracts/schema.md
