@@ -1,178 +1,175 @@
 # TripGo — Trip Service
 
-Сервис создаёт, возвращает и завершает поездки. В лабораторной №1 реализованы
-HTTP API, конфигурация, PostgreSQL, миграции, история статусов, менеджер
-транзакций и корректная остановка сервиса.
+Сервис создаёт, возвращает и завершает поездки, сохраняя историю статусов
+в PostgreSQL. Контракт: [OpenAPI](contracts/openapi/trip-service.openapi.yaml).
 
-## Требования и запуск
+## Запуск
 
-Нужны Go 1.26.2, Make, запущенный Docker и `tripgoctl`. Для примеров ниже нужны
-curl и jq. При первой сборке нужен доступ к Go-модулям. Версии зависимостей,
-`goose` и `oapi-codegen` закреплены в `go.mod` и `go.sum`.
-
-Установите `tripgoctl` по [инструкции курса](https://github.com/course-go-autumn-2026/course-infra#установка).
-Затем из корня проекта, где уже есть `environment.toml`, выполните:
+Нужны Go 1.26.2 или новее, Make, Docker и
+[tripgoctl](https://github.com/course-go-autumn-2026/course-infra#установка).
+Команды выполняются из корня репозитория:
 
 ```bash
 tripgoctl cluster start
 tripgoctl environment start
 tripgoctl connect
 make migrate
-make migrate-status
 make run
 ```
 
-`tripgoctl environment start` создаёт `.env` с адресом PostgreSQL.
-**Не заменяйте `.env` копией `.env.example`: пример не содержит адреса и пароля БД.**
-Если окружение уже запущено, достаточно `make migrate`, затем `make run`.
-Миграции автоматически при старте сервиса не применяются.
-
 `make run` собирает `bin/trip-service` и запускает его с `-local-env`.
-Сервис и команды миграций загружают настройки с приоритетом:
-**окружение процесса → `.env` → `.env.example`**. Dotenv-файлы не исполняются
-как shell-код. Явно пустая переменная тоже имеет приоритет и проходит валидацию.
-Без `-local-env` бинарник читает только окружение процесса.
+Настройки читаются с приоритетом: окружение процесса → `.env` → `.env.example`.
+Dotenv-файлы не исполняются как shell-код. Без `-local-env` используется только
+окружение процесса. `.env` создаёт tripgoctl; не заменяйте его примером.
+`config/trip-service.env.example` сервис не загружает.
 
-```bash
-HTTP_ADDR=127.0.0.1:8081 LOG_LEVEL=debug make run
+Все настройки обязательны. Конфигурация проверяется до подключения к БД:
+
+| Переменная | Назначение |
+|---|---|
+| `HTTP_ADDR` | Адрес host:port, порт 1..65535 |
+| `LOG_LEVEL` | debug, info, warn или error |
+| `SHUTDOWN_TIMEOUT` | Общий бюджет остановки HTTP, SDK телеметрии и пула |
+| `HTTP_READ_TIMEOUT` | Чтение HTTP-запроса |
+| `HTTP_READ_HEADER_TIMEOUT` | Чтение заголовков, не больше READ_TIMEOUT |
+| `HTTP_WRITE_TIMEOUT` | Запись HTTP-ответа |
+| `HTTP_IDLE_TIMEOUT` | Ожидание следующего запроса |
+| `DATABASE_URL` | URL PostgreSQL с пользователем, хостом и именем БД |
+| `DATABASE_MAX_CONNS` | Максимум соединений, 1..2147483647 |
+| `DATABASE_MIN_CONNS` | Минимум соединений, 0..MAX_CONNS |
+| `DATABASE_MAX_CONN_LIFETIME` | Срок жизни соединения, больше CONNECT_TIMEOUT |
+| `DATABASE_CONNECT_TIMEOUT` | Подключение и стартовый Ping |
+| `DATABASE_QUERY_TIMEOUT` | Бюджет транзакции, запроса и ready, меньше WRITE_TIMEOUT |
+
+Длительности задаются положительными Go duration, например `3s`.
+Миграции при старте автоматически не применяются. `make migrate-status`
+показывает их состояние, `make migrate-down` откатывает одну миграцию,
+удаляя соответствующую таблицу с данными. Откаты проверяйте на отдельной БД.
+
+## Архитектура
+
+```text
+cmd/trip-service          конфигурация, container.New(ctx, ...), запуск и сигналы
+internal/config           разбор и проверка окружения
+internal/container        сборка зависимостей, стартовый Ping, HTTP-сервер и shutdown
+internal/http             маршрутизатор, OpenAPI-валидация и делегирующий адаптер
+  trip/create, get, finish обработчики с узкими интерфейсами usecase
+  trip                    общее преобразование поездки в ответ
+  domainerror              единый маппинг доменных ошибок в Problem
+  response, health         запись ответов и проверки доступности
+internal/usecase/trip      create, get, finish; интерфейсы репозитория и транзакций
+internal/domain/trip       модель, валидация, статусы, Finish и доменные ошибки
+internal/model             вход создания и запись истории
+internal/repository/trip   параметризованные SQL-запросы
+internal/infra/postgres/transaction  транзакции через context
+internal/infra/telemetry    OTel SDK, OTLP, otelpgx и бизнес-метрики
+internal/logging           корреляция slog со спаном и безопасные причины ошибок
+api                       сгенерированный код OpenAPI
 ```
 
-## Конфигурация
+Конкретные зависимости собираются только в container: пул → транзакции и
+репозиторий → usecase → обработчики → маршрутизатор → сервер. HTTP не знает
+про PostgreSQL; ready получает интерфейс `Ping(context.Context) error`.
+Интерфейсы объявляет потребитель в `contract.go`, зависимости передаются
+конструкторами. Домен не зависит от HTTP и инфраструктуры.
 
-Все 13 переменных обязательны для сервиса. При `make run` значения, кроме
-`DATABASE_URL`, берутся из корневого [.env.example](.env.example).
-Исходный `config/trip-service.env.example` не загружается.
+Пути `cmd/trip-service` и `api/` сохранены по conventions.md: это допустимые
+имена из ЛР1, их переименование не меняет архитектуру.
+UUID проверяются шаблонами в отдельной копии схемы каждого роутера;
+глобальной регистрации валидаторов и `init()` в коде сервиса нет.
 
-| Переменная | Значение в примере | Назначение |
-|---|---|---|
-| `HTTP_ADDR` | `:8080` | Адрес HTTP-сервера |
-| `LOG_LEVEL` | `info` | Уровень JSON-логов: `debug`, `info`, `warn`, `error` |
-| `SHUTDOWN_TIMEOUT` | `10s` | Общий бюджет остановки HTTP и пула |
-| `HTTP_READ_TIMEOUT` | `10s` | Чтение всего запроса |
-| `HTTP_READ_HEADER_TIMEOUT` | `5s` | Чтение заголовков |
-| `HTTP_WRITE_TIMEOUT` | `10s` | Запись ответа |
-| `HTTP_IDLE_TIMEOUT` | `60s` | Простой keep-alive соединения |
-| `DATABASE_URL` | пусто | URL PostgreSQL, который подготавливает tripgoctl |
-| `DATABASE_MAX_CONNS` | `10` | Максимальное число соединений |
-| `DATABASE_MIN_CONNS` | `2` | Минимальное число соединений |
-| `DATABASE_MAX_CONN_LIFETIME` | `30m` | Максимальное время жизни соединения |
-| `DATABASE_CONNECT_TIMEOUT` | `5s` | Подключение и стартовый Ping |
-| `DATABASE_QUERY_TIMEOUT` | `3s` | Бюджет `/ready`, транзакции или отдельного запроса, включая ожидание пула |
+HTTP выполняется в порядке Recover → Tracing → Logging → Metrics → роутер.
+Один серверный спан создаёт otelhttp, SQL инструментируется otelpgx на уровне
+пула. В HTTP-именах и метках используются шаблоны маршрутов, для неизвестных
+путей — `/unmatched`. Секреты, SQL-параметры и тексты внутренних ошибок
+в ответы и телеметрию не попадают; диагностика сохраняет операцию и SQLSTATE.
 
-Настройки проверяются до подключения к БД:
+## Телеметрия
 
-- Длительности имеют формат Go (`500ms`, `5s`, `30m`) и больше нуля.
-- `HTTP_READ_HEADER_TIMEOUT <= HTTP_READ_TIMEOUT`;
-  `DATABASE_QUERY_TIMEOUT < HTTP_WRITE_TIMEOUT`;
-  `DATABASE_MAX_CONN_LIFETIME > DATABASE_CONNECT_TIMEOUT`.
-- `1 <= DATABASE_MAX_CONNS <= 2147483647`,
-  `0 <= DATABASE_MIN_CONNS <= DATABASE_MAX_CONNS`.
-- `HTTP_ADDR` имеет формат `host:port`; порт — от 1 до 65535.
-- `DATABASE_URL` — `postgres://` или `postgresql://` с пользователем, одним
-  TCP-хостом и именем БД. Явный порт — от 1 до 65535. Unix-сокеты и списки
-  хостов не поддерживаются. Отдельные настройки пула и подключения важнее опций URL.
+Переменные ЛР2 перечислены в `.env.example`:
 
-Ошибка конфигурации называет переменную, не раскрывая её значение.
-Недоступная БД или занятый HTTP-порт приводят к ненулевому коду выхода.
+| Переменная | Назначение |
+|---|---|
+| `OTEL_SERVICE_NAME` | Имя сервиса, обычно trip-service |
+| `OTEL_EXPORTER_OTLP_ENDPOINT` | Обязательный HTTP(S) URL коллектора из окружения ЛР2 |
+| `OTEL_EXPORTER_OTLP_PROTOCOL` | http/protobuf или grpc |
+| `OTEL_RESOURCE_ATTRIBUTES` | service.namespace=tripgo,deployment.environment=local |
+| `OTEL_TRACES_SAMPLER` | parentbased_always_on, parentbased_always_off, always_on или always_off |
 
-## Сборка, генерация и миграции
+Ресурс включает service.name, service.namespace, deployment.environment и
+service.version из информации о сборке; версию можно задать в
+OTEL_RESOURCE_ATTRIBUTES. Адрес коллектора в коде отсутствует. Экспорт
+асинхронный: недоступный коллектор не блокирует запросы и ready. SDK выгружает
+данные после остановки HTTP, пока пул ещё открыт, в общем SHUTDOWN_TIMEOUT.
 
-Все команды выполняются из корня проекта:
+Метрики: http.server.request.duration, http.server.active_requests,
+db.client.operation.duration, tripgo.trips.created, tripgo.trips.completed
+и tripgo.trips.active. otelhttp также отдаёт размеры тел запросов и ответов.
+HTTP-длительность не дублируется. Для DB-длительности метки каталога добавляет
+pool tracer; встроенный meter otelpgx отключён, спаны остаются библиотечными.
+Бизнес-счётчики и логи обновляются после commit. Gauge читает реальный COUNT
+активных поездок с таймаутом, без подстановки нуля при ошибке.
+
+Создание и завершение вместе с историей выполняются атомарно. Транзакция
+передаётся через context; вложенный Do использует её же, вне транзакции
+репозиторий работает через пул. Завершение вызывает доменный Finish,
+затем условный UPDATE по status = active и только после успеха пишет историю.
+Уникальный индекс защищает водителя от двух активных поездок.
+При SIGINT/SIGTERM сервер прекращает принимать запросы, дожидается текущих,
+затем закрывается пул — всё в пределах SHUTDOWN_TIMEOUT.
+
+## HTTP
+
+- `POST /api/v1/trips` → 201 с Location; `GET /api/v1/trips/{id}` и
+  `POST /api/v1/trips/{id}/finish` → 200.
+- Обязательны ненулевые UUID пользователя и водителя, обе точки и цена int64 ≥ 0.
+  Широта −90..90, долгота −180..180; нулевые значения допустимы.
+- Проверяются обязательные поля, null, неизвестные свойства, EOF и лимит тела
+  1 MiB. GET и finish требуют пустого тела.
+- Ошибки: 400 invalid_request, 404 trip_not_found, 409 driver_busy/trip_completed,
+  500 internal_error. Формат — application/problem+json без технических деталей.
+- `/health` → 200 без БД; `/ready` → 200 или 503 после Ping с таймаутом.
+- Необязательные finished_at и last_position_at отсутствуют до заполнения.
+  Операции с координатами из будущих работ пока не подключены.
+
+## Проверки
 
 ```bash
-make generate        # обновить api/api.gen.go из OpenAPI
-make build           # собрать bin/trip-service
-make migrate         # применить ожидающие миграции
-make migrate-status  # показать состояние миграций
-make migrate-down    # откатить одну последнюю миграцию
+make generate       # OpenAPI и gomock через инструменты go.mod
+make lint           # обычный код и код с тегом integration, без запуска тестов
+make build
+make test           # все unit-тесты с -race -count=2
+make test-integration # PostgreSQL через testcontainers, -race -count=2
+# профиль domain/usecase: bin/coverage.out; итог выводит go tool cover
+
+go mod tidy
+go build ./...
+go vet ./...
+git diff --check
 ```
 
-Генерация использует [OpenAPI-контракт](contracts/openapi/trip-service.openapi.yaml)
-и [конфигурацию](config/oapi-codegen.yaml): модели, chi-сервер и встроенную схему
-для пяти операций этой работы. Инструменты запускаются через `go tool`;
-отдельная глобальная установка не нужна. Сгенерированный код вручную не меняется.
+Для `make lint` используется golangci-lint **2.14.0**. Конфигурация основана
+на [конфиге курса](https://github.com/course-go-autumn-2026/course/blob/main/homework/config/golangci.yml)
+с путями текущего модуля и generated API в `api/`. Форматирование gofumpt/gci:
+`golangci-lint fmt ./...`.
 
-Две миграции создают `trips` и `trip_status_history` транзакционно.
-Повторный `make migrate` пропускает уже применённые версии.
-**`make migrate-down` откатывает одну миграцию и удаляет соответствующую таблицу
-с данными:** сначала историю, при следующем вызове — поездки.
-Для проверки откатов используйте отдельную тестовую БД.
-Роли БД нужны права на миграции, чтение и запись таблиц и последовательность истории.
+Моки генерируются `go:generate` и `go tool mockgen` рядом с контрактами
+в тестовых пакетах. Тесты проверяют домен, usecase, HTTP, OpenAPI-валидацию,
+ошибки и health/ready без настоящей БД. Обычный `make test` не требует Docker.
 
-## HTTP API
+Для `make test-integration` нужен запущенный Docker. Testcontainers создаёт
+один временный изолированный PostgreSQL `17.6` на запуск пакета и применяет
+миграции через goose. Первая загрузка образа требует сети. `.env`, DATABASE_URL
+сервиса и данные tripgoctl не используются. При недоступном Docker команда
+завершается ошибкой. Каждый тест удаляет только собственные данные; после
+запуска закрывается пул и удаляется тестовый контейнер.
 
-После запуска откройте второй терминал. Пример для адреса `:8080`:
+Интеграционные сценарии проверяют репозиторий, usecase, rollback обеих таблиц
+и конкурентные создание и завершение. Они отделены тегом `integration`.
+Unit-тесты callback сами по себе не подтверждают настоящий rollback.
 
-```bash
-curl -i http://localhost:8080/health
-curl -i http://localhost:8080/ready
-
-trip_json=$(curl --fail-with-body -sS http://localhost:8080/api/v1/trips \
-  -H 'Content-Type: application/json' \
-  -d '{"user_id":"5cb72c04-7650-45c9-a79b-bcdba0631e0c",
-       "driver_id":"8860b315-ec86-42eb-a17c-7c163d721ff5",
-       "start_point":{"latitude":59.9398,"longitude":30.3146},
-       "end_point":{"latitude":59.929,"longitude":30.3626},
-       "price":1450}')
-printf '%s\n' "$trip_json" | jq
-TRIP_ID=$(printf '%s' "$trip_json" | jq -r .id)
-curl -i "http://localhost:8080/api/v1/trips/$TRIP_ID"
-curl -i -X POST "http://localhost:8080/api/v1/trips/$TRIP_ID/finish"
-curl -i "http://localhost:8080/api/v1/trips/$TRIP_ID"
-```
-
-Создание возвращает `201`, поездку со статусом `active` и заголовок
-`Location: /api/v1/trips/{id}`. Получение и завершение возвращают `200`.
-После завершения статус — `completed`, поле `finished_at` содержит время RFC 3339.
-Успешные ответы имеют тип `application/json`.
-
-Обязательны ненулевые UUID пользователя и водителя, обе точки со всеми
-координатами и целая цена `int64 >= 0`. Широта — от −90 до 90, долгота — от −180
-до 180. Нулевые цена и координаты допустимы. Отсутствующие поля, `null`,
-неизвестные поля и лишний JSON отклоняются. Лимит тела — 1 MiB;
-GET и finish требуют пустого тела.
-
-Ошибки возвращаются как `application/problem+json` с полями `type`, `title`,
-`status`, `detail`, `instance`, `code`, без внутренних ошибок БД и секретов:
-
-| HTTP | `code` | Причина |
-|---|---|---|
-| 400 | `invalid_request` | Невалидное тело или UUID |
-| 404 | `trip_not_found` | Поездки нет |
-| 409 | `driver_busy` | У водителя уже есть активная поездка |
-| 409 | `trip_completed` | Поездка уже завершена |
-| 500 | `internal_error` | Внутренняя ошибка |
-
-`/health` возвращает `200 {"status":"ok"}` без обращения к БД.
-`/ready` проверяет БД с таймаутом: `200 {"status":"ok"}` или
-`503 {"status":"unavailable"}`. Наличие таблиц эта проверка не подтверждает.
-
-`finished_at` до завершения и `last_position_at` отсутствуют в JSON из-за
-`omitempty`. Эти nullable-поля не входят в `required`, поэтому их отсутствие
-допустимо, хотя пример задания показывает `null`. Колонки `last_position_at`
-в БД этой работы нет.
-
-## Решения
-
-Используется уровень изоляции Read Committed. Для наших операций его
-достаточно: уникальный индекс защищает от создания двух активных поездок,
-а завершение выполняется через UPDATE с условием status = 'active'.
-При одновременном завершении одна операция проходит, другая получает
-ошибку trip_completed.
-
-Менеджер транзакций открывает транзакцию и передаёт её через context.
-Репозиторий использует транзакцию из контекста, а если её нет — пул.
-Вложенный Do использует ту же транзакцию. При успехе выполняется commit,
-при ошибке или панике — rollback; паника передаётся дальше.
-Изменение поездки и запись истории выполняются в одной транзакции.
-
-Частичный уникальный индекс по driver_id для строк со статусом active
-не позволяет водителю иметь две активные поездки, в том числе при
-одновременных запросах. Нарушение этого ограничения возвращается клиенту
-как 409 driver_busy.
-
-## Проверки и ограничения
-
-`make test` запускает `go test -race ./...`.
-
-Бонусные задания не реализованы.
+Тесты SDK используют InMemoryExporter и ManualReader; интеграционный тест
+проверяет связку HTTP → SQL и метрики на временной PostgreSQL. Живой экспорт
+в окружении ЛР2 проверен в Jaeger/Grafana; скриншоты подготовлены для PR.
+Gremlins v0.6.0 дал для domain/usecase 44 варианта: 31 пойман тестами,
+13 не скомпилировались, выживших исполнимых — 0.

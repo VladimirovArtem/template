@@ -1,8 +1,9 @@
-.PHONY: generate build run migrate migrate-status migrate-down test
+.PHONY: generate build run migrate migrate-status migrate-down test test-integration lint
 
 generate:
 	mkdir -p api
 	go tool oapi-codegen -config config/oapi-codegen.yaml contracts/openapi/trip-service.openapi.yaml
+	go generate ./internal/usecase/... ./internal/http/... ./internal/infra/telemetry/...
 
 build:
 	mkdir -p bin
@@ -21,4 +22,13 @@ migrate-down:
 	go run ./scripts/migrate down
 
 test:
-	go test -race ./...
+	mkdir -p bin
+	go test -race -count=2 -coverprofile=bin/coverage.out -coverpkg=./internal/domain/...,./internal/usecase/... ./...
+	go tool cover -func=bin/coverage.out
+
+test-integration:
+	go test -tags=integration -race -count=2 -timeout=6m -v ./internal/repository/trip
+
+lint:
+	golangci-lint run ./...
+	golangci-lint run --build-tags=integration ./...
