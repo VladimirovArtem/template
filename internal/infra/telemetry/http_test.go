@@ -123,6 +123,51 @@ func TestHTTPSignals(t *testing.T) {
 	}
 }
 
+func TestHTTPPanicAfterResponseStarted(t *testing.T) {
+	t.Parallel()
+	traces, meters, reader, exporter := memoryTelemetry(t)
+	var logs bytes.Buffer
+	logger := slog.New(logging.Handler{Handler: slog.NewJSONHandler(&logs, nil)}).With("service", testServiceName)
+	instrumentation, err := middleware.New(logger, response.New(logger), traces, meters)
+	if err != nil {
+		t.Fatal(err)
+	}
+	const partialBody = `{"status":`
+	const route = "/partial/{tripId}"
+	router := chi.NewRouter()
+	router.Get(route, func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusAccepted)
+		if _, err := w.Write([]byte(partialBody)); err != nil {
+			t.Fatal(err)
+		}
+		panic("password=secret")
+	})
+	id := uuid.NewString()
+	request := httptest.NewRequest(http.MethodGet, "/partial/"+id, nil)
+	request.Header.Set("traceparent", "00-11111111111111111111111111111111-2222222222222222-01")
+	recorder := httptest.NewRecorder()
+	instrumentation.Wrap(router, router).ServeHTTP(recorder, request)
+	if recorder.Code != http.StatusAccepted || recorder.Body.String() != partialBody {
+		t.Fatalf("response changed after panic: status=%d, body=%s", recorder.Code, recorder.Body)
+	}
+	if strings.Count(logs.String(), "\n") != 1 || strings.Contains(logs.String(), "password=secret") {
+		t.Fatalf("unsafe or duplicated log: %s", &logs)
+	}
+	var record map[string]any
+	if err := json.Unmarshal(logs.Bytes(), &record); err != nil {
+		t.Fatal(err)
+	}
+	if record["level"] != "ERROR" || record["status"] != float64(http.StatusAccepted) || record["stack"] == nil {
+		t.Fatalf("panic log fields: %v", record)
+	}
+	checkHTTPTrace(t, exporter.GetSpans(), record, http.MethodGet, route, http.StatusAccepted, true, false)
+	var output metricdata.ResourceMetrics
+	if err := reader.Collect(t.Context(), &output); err != nil {
+		t.Fatal(err)
+	}
+	checkHTTPMetrics(t, output, route, id, http.StatusAccepted)
+}
+
 func checkHTTPTrace(t *testing.T, spans tracetest.SpanStubs, record map[string]any, method, route string, statusCode int, panicked, unknown bool) {
 	t.Helper()
 

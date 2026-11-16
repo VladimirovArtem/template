@@ -86,7 +86,7 @@ func (m *HTTP) log(next http.Handler) http.Handler {
 		trace.SpanFromContext(r.Context()).SetAttributes(attribute.String("http.route", state.Route))
 		defer func() {
 			level := slog.LevelInfo
-			if state.Status >= http.StatusInternalServerError {
+			if state.Status >= http.StatusInternalServerError || state.Err != nil {
 				level = slog.LevelError
 			}
 			attrs := []slog.Attr{
