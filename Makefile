@@ -3,7 +3,7 @@
 generate:
 	mkdir -p api
 	go tool oapi-codegen -config config/oapi-codegen.yaml contracts/openapi/trip-service.openapi.yaml
-	go generate ./internal/usecase/... ./internal/http/... ./internal/infra/telemetry/...
+	go generate ./internal/usecase/... ./internal/http/... ./internal/infra/telemetry/... ./internal/worker/... ./internal/container/...
 
 build:
 	mkdir -p bin

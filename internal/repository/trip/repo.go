@@ -14,7 +14,7 @@ import (
 const (
 	activeDriverIndex   = "trips_one_active_per_driver_idx"
 	uniqueViolationCode = "23505"
-	tripColumns         = "id, user_id, driver_id, start_latitude, start_longitude, end_latitude, end_longitude, price, status, started_at, finished_at, created_at, updated_at"
+	tripColumns         = "id, user_id, driver_id, start_latitude, start_longitude, end_latitude, end_longitude, price, status, started_at, finished_at, last_position_at, created_at, updated_at"
 )
 
 type Repository struct {
@@ -30,7 +30,7 @@ func scanTrip(row pgx.Row) (trip.Trip, error) {
 	var tripData trip.Trip
 	err := row.Scan(&tripData.ID, &tripData.UserID, &tripData.DriverID,
 		&tripData.StartPoint.Latitude, &tripData.StartPoint.Longitude, &tripData.EndPoint.Latitude, &tripData.EndPoint.Longitude,
-		&tripData.Price, &tripData.Status, &tripData.StartedAt, &tripData.FinishedAt, &tripData.CreatedAt, &tripData.UpdatedAt)
+		&tripData.Price, &tripData.Status, &tripData.StartedAt, &tripData.FinishedAt, &tripData.LastPositionAt, &tripData.CreatedAt, &tripData.UpdatedAt)
 	return tripData, err
 }
 

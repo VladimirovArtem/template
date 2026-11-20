@@ -134,3 +134,81 @@ func (mr *MockpingerMockRecorder) Ping(arg0 any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Ping", reflect.TypeOf((*Mockpinger)(nil).Ping), arg0)
 }
+
+// MockpositionCreator is a mock of positionCreator interface.
+type MockpositionCreator struct {
+	ctrl     *gomock.Controller
+	recorder *MockpositionCreatorMockRecorder
+	isgomock struct{}
+}
+
+// MockpositionCreatorMockRecorder is the mock recorder for MockpositionCreator.
+type MockpositionCreatorMockRecorder struct {
+	mock *MockpositionCreator
+}
+
+// NewMockpositionCreator creates a new mock instance.
+func NewMockpositionCreator(ctrl *gomock.Controller) *MockpositionCreator {
+	mock := &MockpositionCreator{ctrl: ctrl}
+	mock.recorder = &MockpositionCreatorMockRecorder{mock}
+	return mock
+}
+
+// EXPECT returns an object that allows the caller to indicate expected use.
+func (m *MockpositionCreator) EXPECT() *MockpositionCreatorMockRecorder {
+	return m.recorder
+}
+
+// Execute mocks base method.
+func (m *MockpositionCreator) Execute(arg0 context.Context, arg1 model.CreatePositionInput) (trip.Position, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "Execute", arg0, arg1)
+	ret0, _ := ret[0].(trip.Position)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// Execute indicates an expected call of Execute.
+func (mr *MockpositionCreatorMockRecorder) Execute(arg0, arg1 any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Execute", reflect.TypeOf((*MockpositionCreator)(nil).Execute), arg0, arg1)
+}
+
+// MockpositionLister is a mock of positionLister interface.
+type MockpositionLister struct {
+	ctrl     *gomock.Controller
+	recorder *MockpositionListerMockRecorder
+	isgomock struct{}
+}
+
+// MockpositionListerMockRecorder is the mock recorder for MockpositionLister.
+type MockpositionListerMockRecorder struct {
+	mock *MockpositionLister
+}
+
+// NewMockpositionLister creates a new mock instance.
+func NewMockpositionLister(ctrl *gomock.Controller) *MockpositionLister {
+	mock := &MockpositionLister{ctrl: ctrl}
+	mock.recorder = &MockpositionListerMockRecorder{mock}
+	return mock
+}
+
+// EXPECT returns an object that allows the caller to indicate expected use.
+func (m *MockpositionLister) EXPECT() *MockpositionListerMockRecorder {
+	return m.recorder
+}
+
+// Execute mocks base method.
+func (m *MockpositionLister) Execute(arg0 context.Context, arg1 uuid.UUID) ([]trip.Position, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "Execute", arg0, arg1)
+	ret0, _ := ret[0].([]trip.Position)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// Execute indicates an expected call of Execute.
+func (mr *MockpositionListerMockRecorder) Execute(arg0, arg1 any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Execute", reflect.TypeOf((*MockpositionLister)(nil).Execute), arg0, arg1)
+}

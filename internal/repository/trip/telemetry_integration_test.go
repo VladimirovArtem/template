@@ -26,6 +26,8 @@ import (
 	transport "github.com/VladimirovArtem/template/internal/http"
 	"github.com/VladimirovArtem/template/internal/http/health"
 	"github.com/VladimirovArtem/template/internal/http/middleware"
+	positioncreatehandler "github.com/VladimirovArtem/template/internal/http/position/create"
+	positionlisthandler "github.com/VladimirovArtem/template/internal/http/position/list"
 	"github.com/VladimirovArtem/template/internal/http/response"
 	createhandler "github.com/VladimirovArtem/template/internal/http/trip/create"
 	finishhandler "github.com/VladimirovArtem/template/internal/http/trip/finish"
@@ -34,6 +36,7 @@ import (
 	"github.com/VladimirovArtem/template/internal/infra/telemetry"
 	"github.com/VladimirovArtem/template/internal/logging"
 	repository "github.com/VladimirovArtem/template/internal/repository/trip"
+	positionlist "github.com/VladimirovArtem/template/internal/usecase/position/list"
 	"github.com/VladimirovArtem/template/internal/usecase/trip/create"
 	"github.com/VladimirovArtem/template/internal/usecase/trip/finish"
 	"github.com/VladimirovArtem/template/internal/usecase/trip/get"
@@ -92,7 +95,8 @@ func TestHTTPPostgresTelemetry(t *testing.T) {
 		t.Fatal(err)
 	}
 	router, err := transport.NewRouter(createhandler.New(creator, writer), gethandler.New(get.New(repo), writer),
-		finishhandler.New(finisher, writer), health.New(pool, queryTimeout, writer), writer, instrumentation)
+		finishhandler.New(finisher, writer), positioncreatehandler.New(newPositionSaver(t, repo, tx, time.Now), writer),
+		positionlisthandler.New(positionlist.New(repo), writer), health.New(pool, queryTimeout, writer), writer, instrumentation)
 	if err != nil {
 		t.Fatal(err)
 	}

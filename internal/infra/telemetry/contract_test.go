@@ -4,6 +4,7 @@ package telemetry_test
 
 import (
 	"context"
+	"time"
 
 	"github.com/google/uuid"
 
@@ -26,8 +27,20 @@ type activeTrips interface {
 	CountActive(context.Context) (int64, error)
 }
 
+type positionRepository interface {
+	StillStale(context.Context, model.StaleTrip) (bool, error)
+	UpdateLastPositionAt(context.Context, uuid.UUID, time.Time) error
+	InsertPosition(context.Context, trip.Position) (trip.Position, error)
+}
+
+type positionGateway interface {
+	RequestPosition(context.Context, model.PositionRequest) error
+}
+
 var (
-	_ tripRepository = (*MocktripRepository)(nil)
-	_ txManager      = (*MocktxManager)(nil)
-	_ activeTrips    = (*MockactiveTrips)(nil)
+	_ tripRepository     = (*MocktripRepository)(nil)
+	_ txManager          = (*MocktxManager)(nil)
+	_ activeTrips        = (*MockactiveTrips)(nil)
+	_ positionRepository = (*MockpositionRepository)(nil)
+	_ positionGateway    = (*MockpositionGateway)(nil)
 )

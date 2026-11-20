@@ -23,6 +23,12 @@ func (c *Container) Run(ctx context.Context) (result error) {
 	if err != nil {
 		return fmt.Errorf("listen on HTTP_ADDR: %w", err)
 	}
+	if c.positions != nil {
+		if err := c.positions.Start(context.WithoutCancel(ctx)); err != nil {
+			_ = listener.Close()
+			return fmt.Errorf("start position worker: %w", err)
+		}
+	}
 	serveErr := make(chan error, 1)
 	go func() { serveErr <- c.server.Serve(listener) }()
 	c.logger.InfoContext(ctx, "HTTP server started", "addr", listener.Addr().String())
@@ -38,28 +44,69 @@ func (c *Container) Run(ctx context.Context) (result error) {
 }
 
 func (c *Container) shutdown(ctx context.Context) error {
-	done := make(chan error, 1)
-	go func() {
-		err := c.server.Shutdown(ctx)
-		if err != nil {
-			err = errors.Join(err, c.server.Close())
-		}
-		err = errors.Join(err, c.telemetry.Shutdown(ctx))
-		if c.pool != nil {
-			c.pool.Close()
-		}
-		done <- err
-	}()
+	c.shutdownOnce.Do(func() {
+		c.shutdownDone = make(chan struct{})
+		c.shutdownContext = ctx
+		go func() {
+			c.shutdownErr = c.stop(ctx)
+			if ctx.Err() != nil {
+				c.shutdownErr = errors.Join(c.shutdownErr, ctx.Err())
+			}
+			close(c.shutdownDone)
+		}()
+	})
+	select {
+	case <-c.shutdownDone:
+		return c.shutdownResult()
+	default:
+	}
 	select {
 	case <-ctx.Done():
+		if c.positions != nil {
+			c.positions.Abort()
+		}
 		return ErrShutdownTimeout
-	case err := <-done:
-		if ctx.Err() != nil || errors.Is(err, context.DeadlineExceeded) {
-			return ErrShutdownTimeout
+	case <-c.shutdownContext.Done():
+		if c.positions != nil {
+			c.positions.Abort()
 		}
-		if err != nil {
-			return fmt.Errorf("shutdown HTTP: %w", err)
-		}
-		return nil
+		return ErrShutdownTimeout
+	case <-c.shutdownDone:
+		return c.shutdownResult()
 	}
+}
+
+func (c *Container) shutdownResult() error {
+	err := c.shutdownErr
+	if errors.Is(err, context.DeadlineExceeded) || errors.Is(err, context.Canceled) {
+		return ErrShutdownTimeout
+	}
+	if err != nil {
+		return fmt.Errorf("shutdown service: %w", err)
+	}
+	return nil
+}
+
+func (c *Container) stop(ctx context.Context) error {
+	err := c.server.Shutdown(ctx)
+	if err != nil {
+		err = errors.Join(err, c.server.Close())
+	}
+	if c.positions != nil {
+		err = errors.Join(err, c.positions.Shutdown(ctx))
+		if ctx.Err() != nil {
+			c.positions.Abort()
+		}
+		<-c.positions.Done()
+	}
+	if c.telemetry != nil {
+		err = errors.Join(err, c.telemetry.Shutdown(ctx))
+	}
+	if c.push != nil {
+		c.push.CloseIdleConnections()
+	}
+	if c.pool != nil {
+		c.pool.Close()
+	}
+	return err
 }
