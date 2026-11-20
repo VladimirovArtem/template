@@ -34,7 +34,7 @@ func TestRejectedTripRequests(t *testing.T) {
 				if err := json.Unmarshal(recorder.Body.Bytes(), &body); err != nil {
 					t.Fatal(err)
 				}
-				if recorder.Code != 400 || recorder.Header().Get("Content-Type") != problemContentType || body.Code != "invalid_request" || body.Status != 400 {
+				if recorder.Code != 400 || recorder.Header().Get("Content-Type") != problemContentType || body.Code != invalidRequestCode || body.Status != 400 {
 					t.Fatalf("invalid rejection: %d %s", recorder.Code, recorder.Body)
 				}
 			})

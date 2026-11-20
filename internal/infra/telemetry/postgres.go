@@ -37,11 +37,10 @@ func NewPostgresTracer(traces trace.TracerProvider, metrics metric.MeterProvider
 		return nil, fmt.Errorf("create database duration histogram: %w", err)
 	}
 	return &PostgresTracer{
-		// otelpgx lacks collection/error metric labels; emit the catalog histogram once at the pool boundary.
 		Tracer: otelpgx.NewTracer(otelpgx.WithTracerProvider(traces), otelpgx.WithMeterProvider(noop.NewMeterProvider()),
 			otelpgx.WithDisableSQLStatementInAttributes(), otelpgx.WithDisableConnectionDetailsInAttributes(), otelpgx.WithDisableAcquireTracer()),
 		duration: duration,
-		table:    regexp.MustCompile(`(?i)\b(?:FROM|INTO|UPDATE)\s+(trips|trip_status_history)\b`),
+		table:    regexp.MustCompile(`(?i)\b(?:FROM|INTO|UPDATE)\s+(trips|trip_status_history|trip_positions)\b`),
 	}, nil
 }
 

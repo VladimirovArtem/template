@@ -23,6 +23,7 @@ type Config struct {
 	QueryTimeout      time.Duration
 	Pool              *pgxpool.Config
 	Telemetry         Telemetry
+	Positions         Positions
 }
 
 func Load() (Config, error) {
@@ -94,6 +95,10 @@ func Load() (Config, error) {
 	pool.ConnConfig.ConnectTimeout = connectTimeout
 	cfg.Pool = pool
 	cfg.Telemetry, err = loadTelemetry()
+	if err != nil {
+		return cfg, err
+	}
+	cfg.Positions, err = loadPositions()
 	if err != nil {
 		return cfg, err
 	}

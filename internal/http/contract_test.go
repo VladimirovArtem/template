@@ -23,8 +23,18 @@ type pinger interface {
 	Ping(context.Context) error
 }
 
+type positionCreator interface {
+	Execute(context.Context, model.CreatePositionInput) (trip.Position, error)
+}
+
+type positionLister interface {
+	Execute(context.Context, uuid.UUID) ([]trip.Position, error)
+}
+
 var (
-	_ creator     = (*Mockcreator)(nil)
-	_ tripUsecase = (*MocktripUsecase)(nil)
-	_ pinger      = (*Mockpinger)(nil)
+	_ creator         = (*Mockcreator)(nil)
+	_ tripUsecase     = (*MocktripUsecase)(nil)
+	_ pinger          = (*Mockpinger)(nil)
+	_ positionCreator = (*MockpositionCreator)(nil)
+	_ positionLister  = (*MockpositionLister)(nil)
 )

@@ -12,6 +12,7 @@ package telemetry_test
 import (
 	context "context"
 	reflect "reflect"
+	time "time"
 
 	trip "github.com/VladimirovArtem/template/internal/domain/trip"
 	model "github.com/VladimirovArtem/template/internal/model"
@@ -177,4 +178,110 @@ func (m *MockactiveTrips) CountActive(arg0 context.Context) (int64, error) {
 func (mr *MockactiveTripsMockRecorder) CountActive(arg0 any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CountActive", reflect.TypeOf((*MockactiveTrips)(nil).CountActive), arg0)
+}
+
+// MockpositionRepository is a mock of positionRepository interface.
+type MockpositionRepository struct {
+	ctrl     *gomock.Controller
+	recorder *MockpositionRepositoryMockRecorder
+	isgomock struct{}
+}
+
+// MockpositionRepositoryMockRecorder is the mock recorder for MockpositionRepository.
+type MockpositionRepositoryMockRecorder struct {
+	mock *MockpositionRepository
+}
+
+// NewMockpositionRepository creates a new mock instance.
+func NewMockpositionRepository(ctrl *gomock.Controller) *MockpositionRepository {
+	mock := &MockpositionRepository{ctrl: ctrl}
+	mock.recorder = &MockpositionRepositoryMockRecorder{mock}
+	return mock
+}
+
+// EXPECT returns an object that allows the caller to indicate expected use.
+func (m *MockpositionRepository) EXPECT() *MockpositionRepositoryMockRecorder {
+	return m.recorder
+}
+
+// InsertPosition mocks base method.
+func (m *MockpositionRepository) InsertPosition(arg0 context.Context, arg1 trip.Position) (trip.Position, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "InsertPosition", arg0, arg1)
+	ret0, _ := ret[0].(trip.Position)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// InsertPosition indicates an expected call of InsertPosition.
+func (mr *MockpositionRepositoryMockRecorder) InsertPosition(arg0, arg1 any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "InsertPosition", reflect.TypeOf((*MockpositionRepository)(nil).InsertPosition), arg0, arg1)
+}
+
+// StillStale mocks base method.
+func (m *MockpositionRepository) StillStale(arg0 context.Context, arg1 model.StaleTrip) (bool, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "StillStale", arg0, arg1)
+	ret0, _ := ret[0].(bool)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// StillStale indicates an expected call of StillStale.
+func (mr *MockpositionRepositoryMockRecorder) StillStale(arg0, arg1 any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "StillStale", reflect.TypeOf((*MockpositionRepository)(nil).StillStale), arg0, arg1)
+}
+
+// UpdateLastPositionAt mocks base method.
+func (m *MockpositionRepository) UpdateLastPositionAt(arg0 context.Context, arg1 uuid.UUID, arg2 time.Time) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "UpdateLastPositionAt", arg0, arg1, arg2)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// UpdateLastPositionAt indicates an expected call of UpdateLastPositionAt.
+func (mr *MockpositionRepositoryMockRecorder) UpdateLastPositionAt(arg0, arg1, arg2 any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateLastPositionAt", reflect.TypeOf((*MockpositionRepository)(nil).UpdateLastPositionAt), arg0, arg1, arg2)
+}
+
+// MockpositionGateway is a mock of positionGateway interface.
+type MockpositionGateway struct {
+	ctrl     *gomock.Controller
+	recorder *MockpositionGatewayMockRecorder
+	isgomock struct{}
+}
+
+// MockpositionGatewayMockRecorder is the mock recorder for MockpositionGateway.
+type MockpositionGatewayMockRecorder struct {
+	mock *MockpositionGateway
+}
+
+// NewMockpositionGateway creates a new mock instance.
+func NewMockpositionGateway(ctrl *gomock.Controller) *MockpositionGateway {
+	mock := &MockpositionGateway{ctrl: ctrl}
+	mock.recorder = &MockpositionGatewayMockRecorder{mock}
+	return mock
+}
+
+// EXPECT returns an object that allows the caller to indicate expected use.
+func (m *MockpositionGateway) EXPECT() *MockpositionGatewayMockRecorder {
+	return m.recorder
+}
+
+// RequestPosition mocks base method.
+func (m *MockpositionGateway) RequestPosition(arg0 context.Context, arg1 model.PositionRequest) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "RequestPosition", arg0, arg1)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// RequestPosition indicates an expected call of RequestPosition.
+func (mr *MockpositionGatewayMockRecorder) RequestPosition(arg0, arg1 any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RequestPosition", reflect.TypeOf((*MockpositionGateway)(nil).RequestPosition), arg0, arg1)
 }

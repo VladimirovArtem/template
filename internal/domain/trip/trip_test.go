@@ -30,6 +30,7 @@ func TestTripFinish(t *testing.T) {
 			candidate := trip.Trip{
 				ID:     uuid.MustParse("11111111-1111-4111-8111-111111111111"),
 				Status: tt.status, StartedAt: startedAt, FinishedAt: tt.finishedAt, UpdatedAt: startedAt,
+				LastPositionAt: &startedAt,
 			}
 			before := candidate
 			var previousFinish time.Time

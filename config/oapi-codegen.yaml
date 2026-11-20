@@ -9,5 +9,7 @@ output-options:
     - createTrip
     - getTrip
     - finishTrip
+    - createTripPosition
+    - listTripPositions
     - health
     - ready

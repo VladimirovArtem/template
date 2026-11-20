@@ -43,6 +43,7 @@ func TestHandle(t *testing.T) {
 				StartPoint: trip.Coordinates{Latitude: 59.9, Longitude: 30.3},
 				EndPoint:   trip.Coordinates{Latitude: 60.1, Longitude: 30.5},
 				Price:      1450, Status: trip.StatusActive, StartedAt: at,
+				LastPositionAt: &at,
 			}
 
 			request := httptest.NewRequest("GET", "/api/v1/trips/"+found.ID.String()+"", nil).WithContext(t.Context())
@@ -74,6 +75,9 @@ func TestHandle(t *testing.T) {
 				body.DriverId != found.DriverID || body.Price != found.Price || body.Status != api.Active || !body.StartedAt.Equal(at) ||
 				body.StartPoint.Latitude != 59.9 || body.StartPoint.Longitude != 30.3 || body.EndPoint.Latitude != 60.1 || body.EndPoint.Longitude != 30.5 {
 				t.Fatalf("invalid trip response: %s", recorder.Body)
+			}
+			if body.LastPositionAt == nil || !body.LastPositionAt.Equal(at) {
+				t.Fatalf("last_position_at = %v", body.LastPositionAt)
 			}
 			if body.FinishedAt != nil {
 				t.Fatalf("finished_at = %v", body.FinishedAt)

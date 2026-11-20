@@ -20,13 +20,13 @@ func TestRejectedCreateRequests(t *testing.T) {
 	tests = append(tests, []testCase{
 		{name: "empty body"},
 		{name: "malformed JSON", body: "{"},
-		{name: "null body", body: "null"},
+		{name: "null body", body: nullJSON},
 		{name: "extra JSON", body: createBody + `{}`},
 		{name: "trailing garbage", body: createBody + `garbage`},
 		{name: "unknown property", body: strings.Replace(createBody, `"price":0`, `"price":0,"other":1`, 1)},
 		{name: "too large body", body: createBody + strings.Repeat(" ", 1<<20)},
 		{name: "wrong content type", body: createBody, contentType: "text/plain"},
-		{name: "missing content type", body: createBody, contentType: "missing"},
+		{name: "missing content type", body: createBody, contentType: missingContentType},
 		{name: "invalid header UUID", body: createBody, key: invalidUUID},
 		{name: "noncanonical header UUID", body: createBody, key: "44444444444444448444444444444444"},
 	}...)
@@ -43,7 +43,7 @@ func TestRejectedCreateRequests(t *testing.T) {
 			if missing {
 				delete(fields, field)
 			} else {
-				fields[field] = json.RawMessage("null")
+				fields[field] = json.RawMessage(nullJSON)
 			}
 			body, err := json.Marshal(fields)
 			if err != nil {
@@ -89,7 +89,7 @@ func TestRejectedCreateRequests(t *testing.T) {
 			if contentType == "" {
 				contentType = jsonContentType
 			}
-			if contentType != "missing" {
+			if contentType != missingContentType {
 				request.Header.Set("Content-Type", contentType)
 			}
 			if tt.key != "" {
@@ -102,7 +102,7 @@ func TestRejectedCreateRequests(t *testing.T) {
 				t.Fatal(err)
 			}
 			if recorder.Code != 400 || recorder.Header().Get("Content-Type") != problemContentType ||
-				body.Status != 400 || body.Code != "invalid_request" || body.Detail == nil || *body.Detail != "Request validation failed" ||
+				body.Status != 400 || body.Code != invalidRequestCode || body.Detail == nil || *body.Detail != "Request validation failed" ||
 				body.Instance == nil || *body.Instance != request.URL.Path || recorder.Header().Get("Location") != "" {
 				t.Fatalf("invalid rejection: %d %s", recorder.Code, recorder.Body)
 			}

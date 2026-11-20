@@ -20,6 +20,8 @@ import (
 	transport "github.com/VladimirovArtem/template/internal/http"
 	"github.com/VladimirovArtem/template/internal/http/health"
 	"github.com/VladimirovArtem/template/internal/http/middleware"
+	positioncreate "github.com/VladimirovArtem/template/internal/http/position/create"
+	positionlist "github.com/VladimirovArtem/template/internal/http/position/list"
 	"github.com/VladimirovArtem/template/internal/http/response"
 	"github.com/VladimirovArtem/template/internal/http/trip/create"
 	"github.com/VladimirovArtem/template/internal/http/trip/finish"
@@ -27,11 +29,13 @@ import (
 )
 
 type testRouter struct {
-	handler http.Handler
-	create  *Mockcreator
-	get     *MocktripUsecase
-	finish  *MocktripUsecase
-	ping    *Mockpinger
+	handler        http.Handler
+	create         *Mockcreator
+	get            *MocktripUsecase
+	finish         *MocktripUsecase
+	ping           *Mockpinger
+	createPosition *MockpositionCreator
+	listPositions  *MockpositionLister
 }
 
 type requestKey struct{}
@@ -42,12 +46,18 @@ const (
 	problemContentType = "application/problem+json"
 	finishOperation    = "finish"
 	invalidUUID        = "invalid"
+	invalidRequestCode = "invalid_request"
+	missingContentType = "missing"
+	nullJSON           = "null"
 )
 
 func newTestRouter(t *testing.T) testRouter {
 	t.Helper()
 	ctrl := gomock.NewController(t)
-	r := testRouter{create: NewMockcreator(ctrl), get: NewMocktripUsecase(ctrl), finish: NewMocktripUsecase(ctrl), ping: NewMockpinger(ctrl)}
+	r := testRouter{
+		create: NewMockcreator(ctrl), get: NewMocktripUsecase(ctrl), finish: NewMocktripUsecase(ctrl), ping: NewMockpinger(ctrl),
+		createPosition: NewMockpositionCreator(ctrl), listPositions: NewMockpositionLister(ctrl),
+	}
 	logger := slog.New(slog.NewJSONHandler(io.Discard, nil))
 	writer := response.New(logger)
 	instrumentation, err := middleware.New(logger, writer, tracenoop.NewTracerProvider(), metricnoop.NewMeterProvider())
@@ -55,6 +65,7 @@ func newTestRouter(t *testing.T) testRouter {
 		t.Fatal(err)
 	}
 	r.handler, err = transport.NewRouter(create.New(r.create, writer), get.New(r.get, writer), finish.New(r.finish, writer),
+		positioncreate.New(r.createPosition, writer), positionlist.New(r.listPositions, writer),
 		health.New(r.ping, readyTimeout, writer), writer, instrumentation)
 	if err != nil {
 		t.Fatal(err)

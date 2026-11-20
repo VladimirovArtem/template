@@ -40,7 +40,6 @@ func New(logger *slog.Logger, writer *response.Writer, traces trace.TracerProvid
 
 func (m *HTTP) Wrap(handler http.Handler, router *chi.Mux) http.Handler {
 	guarded := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		// Recover inside otelhttp as well so it records the recovered response, including its 500 duration.
 		defer m.recover(w, r)
 		handler.ServeHTTP(w, r)
 	})

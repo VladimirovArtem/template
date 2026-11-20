@@ -123,6 +123,41 @@ func migrate(ctx context.Context, dsn string) (result error) {
 	if err != nil {
 		return err
 	}
-	_, err = provider.Up(ctx)
-	return err
+	if _, err := provider.Up(ctx); err != nil {
+		return fmt.Errorf("apply migrations: %w", err)
+	}
+	if _, err := provider.DownTo(ctx, 4); err != nil {
+		return fmt.Errorf("roll back stale index migration: %w", err)
+	}
+	var staleIndexRemoved, positionsIntact bool
+	if err := db.QueryRowContext(ctx, `SELECT to_regclass($1) IS NULL,
+		to_regclass('trip_positions') IS NOT NULL AND EXISTS (
+		SELECT 1 FROM information_schema.columns WHERE table_schema = 'public'
+		AND table_name = 'trips' AND column_name = 'last_position_at')`, staleIndexName).Scan(&staleIndexRemoved, &positionsIntact); err != nil {
+		return fmt.Errorf("check stale index down migration: %w", err)
+	}
+	if !staleIndexRemoved || !positionsIntact {
+		return fmt.Errorf("stale index down migration: index removed=%t, positions intact=%t", staleIndexRemoved, positionsIntact)
+	}
+	if _, err := provider.Up(ctx); err != nil {
+		return fmt.Errorf("reapply stale index migration: %w", err)
+	}
+	// Exercise the new down migrations only on this disposable PostgreSQL.
+	if _, err := provider.DownTo(ctx, 2); err != nil {
+		return fmt.Errorf("roll back position migrations: %w", err)
+	}
+	var tableRemoved, columnRemoved, indexRemoved bool
+	if err := db.QueryRowContext(ctx, `SELECT to_regclass('trip_positions') IS NULL,
+		NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'public'
+		AND table_name = 'trips' AND column_name = 'last_position_at'),
+		to_regclass('trips_active_reference_at_id_idx') IS NULL`).Scan(&tableRemoved, &columnRemoved, &indexRemoved); err != nil {
+		return fmt.Errorf("check position down migrations: %w", err)
+	}
+	if !tableRemoved || !columnRemoved || !indexRemoved {
+		return fmt.Errorf("down migrations: table removed=%t, column removed=%t, stale index removed=%t", tableRemoved, columnRemoved, indexRemoved)
+	}
+	if _, err := provider.Up(ctx); err != nil {
+		return fmt.Errorf("reapply position migrations: %w", err)
+	}
+	return nil
 }
